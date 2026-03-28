@@ -7,6 +7,9 @@ module.exports = (io) => {
 
   router.post('/', authGuard, async (req, res) => {
   try {
+    console.log('New clip POST received');
+    console.log('User ID from token:', req.user.uid);
+    
     const { content, type } = req.body;
 
     if (!content || !type) {
@@ -35,7 +38,8 @@ module.exports = (io) => {
     const clipRef = await db.collection('clips').add(clipData);
     const savedClip = { id: clipRef.id, ...clipData };
 
-    console.log('Emitting new-clip to room:', req.user.uid);
+    console.log('Emitting to room:', req.user.uid);
+    console.log('Connected rooms:', Object.keys(io.sockets.adapter.rooms).join(', '));
     io.to(req.user.uid).emit('new-clip', savedClip);
 
     res.json(savedClip);
