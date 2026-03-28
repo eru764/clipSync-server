@@ -35,6 +35,7 @@ module.exports = (io) => {
     const clipRef = await db.collection('clips').add(clipData);
     const savedClip = { id: clipRef.id, ...clipData };
 
+    console.log('Emitting new-clip to room:', req.user.uid);
     io.to(req.user.uid).emit('new-clip', savedClip);
 
     res.json(savedClip);
