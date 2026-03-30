@@ -72,4 +72,40 @@ router.get('/', authGuard, async (req, res) => {
   }
 });
 
+router.delete('/:deviceId', authGuard, async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+
+    // Get the device document
+    const deviceDoc = await db.collection('devices').doc(deviceId).get();
+
+    if (!deviceDoc.exists) {
+      return res.status(404).json({ 
+        error: 'Not Found', 
+        message: 'Device not found' 
+      });
+    }
+
+    // Verify the device belongs to the authenticated user
+    const deviceData = deviceDoc.data();
+    if (deviceData.userId !== req.user.uid) {
+      return res.status(403).json({ 
+        error: 'Forbidden', 
+        message: 'You do not have permission to delete this device' 
+      });
+    }
+
+    // Delete the device
+    await db.collection('devices').doc(deviceId).delete();
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting device:', error);
+    res.status(500).json({ 
+      error: 'Internal Server Error', 
+      message: 'Failed to delete device' 
+    });
+  }
+});
+
 module.exports = router;
