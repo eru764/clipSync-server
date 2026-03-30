@@ -21,8 +21,15 @@ const initSockets = (io) => {
         console.log(`Socket ${socket.id} joined room: ${userId}`);
       } catch (error) {
         console.error('Token verification failed:', error.message);
-        socket.emit('error', { message: 'Unauthorized' });
-        socket.disconnect();
+        
+        // If token expired, let client refresh instead of disconnecting
+        if (error.code === 'auth/id-token-expired' || error.message.includes('expired')) {
+          socket.emit('token-expired', { message: 'Token expired, please refresh' });
+          // Don't disconnect, wait for client to rejoin with new token
+        } else {
+          socket.emit('error', { message: 'Unauthorized' });
+          socket.disconnect();
+        }
       }
     });
 

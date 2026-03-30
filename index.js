@@ -40,3 +40,8 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+// Keep Railway container alive
+setInterval(() => {
+  console.log('Keep-alive ping:', new Date().toISOString());
+}, 4 * 60 * 1000); // every 4 minutes
