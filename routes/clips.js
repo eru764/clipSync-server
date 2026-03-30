@@ -1,6 +1,6 @@
 const express = require('express');
 const authGuard = require('../middleware/authGuard');
-const { db } = require('../config/firebase');
+const { db, admin } = require('../config/firebase');
 
 module.exports = (io) => {
   const router = express.Router();
@@ -41,6 +41,43 @@ module.exports = (io) => {
     console.log('Emitting to room:', req.user.uid);
     console.log('Connected rooms:', Object.keys(io.sockets.adapter.rooms).join(', '));
     io.to(req.user.uid).emit('new-clip', savedClip);
+
+    // Send FCM push notifications to all registered devices
+    try {
+      const devicesSnapshot = await db
+        .collection('devices')
+        .where('userId', '==', req.user.uid)
+        .get();
+      
+      const notificationPromises = [];
+      devicesSnapshot.forEach(doc => {
+        const device = doc.data();
+        if (device.fcmToken) {
+          const notificationBody = content.length > 50 ? content.substring(0, 50) + '...' : content;
+          const message = {
+            token: device.fcmToken,
+            notification: {
+              title: 'New Clip',
+              body: notificationBody
+            },
+            data: {
+              clipId: clipRef.id,
+              type: type
+            }
+          };
+          notificationPromises.push(
+            admin.messaging().send(message)
+              .then(() => console.log(`FCM sent to device ${device.deviceId}`))
+              .catch(err => console.error(`FCM failed for device ${device.deviceId}:`, err.message))
+          );
+        }
+      });
+      
+      await Promise.all(notificationPromises);
+    } catch (fcmError) {
+      console.error('Error sending FCM notifications:', fcmError);
+      // Don't fail the request if FCM fails
+    }
 
     res.json(savedClip);
   } catch (error) {

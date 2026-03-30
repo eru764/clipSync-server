@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.post('/register', authGuard, async (req, res) => {
   try {
-    const { deviceName, platform } = req.body;
+    const { deviceName, platform, fcmToken } = req.body;
 
     if (!deviceName || !platform) {
       return res.status(400).json({ 
@@ -32,6 +32,11 @@ router.post('/register', authGuard, async (req, res) => {
       platform,
       registeredAt: new Date()
     };
+
+    // Add FCM token if provided
+    if (fcmToken) {
+      deviceData.fcmToken = fcmToken;
+    }
 
     await db.collection('devices').doc(deviceId).set(deviceData);
 
