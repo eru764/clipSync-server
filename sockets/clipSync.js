@@ -1,4 +1,4 @@
-const { auth } = require('../config/firebase');
+const { supabase } = require('../config/supabase');
 
 const initSockets = (io) => {
   io.on('connection', (socket) => {
@@ -12,8 +12,14 @@ const initSockets = (io) => {
           return;
         }
 
-        const decodedToken = await auth.verifyIdToken(token);
-        const userId = decodedToken.uid;
+        // Verify Supabase JWT token
+        const { data: { user }, error } = await supabase.auth.getUser(token);
+        
+        if (error || !user) {
+          throw new Error('Invalid token');
+        }
+
+        const userId = user.id;
 
         socket.join(userId);
         socket.emit('room-joined', { userId });
@@ -23,7 +29,7 @@ const initSockets = (io) => {
         console.error('Token verification failed:', error.message);
         
         // If token expired, let client refresh instead of disconnecting
-        if (error.code === 'auth/id-token-expired' || error.message.includes('expired')) {
+        if (error.message.includes('expired') || error.message.includes('JWT')) {
           socket.emit('token-expired', { message: 'Token expired, please refresh' });
           // Don't disconnect, wait for client to rejoin with new token
         } else {
