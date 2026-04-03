@@ -24,9 +24,11 @@ router.post('/', authGuard, upload.single('file'), async (req, res) => {
 
     // Generate unique filename with timestamp
     const timestamp = Date.now();
-    const userId = req.user.uid;
+    const userId = req.user.id || req.user.uid;
     const originalName = req.file.originalname;
     const storagePath = `${userId}/${timestamp}_${originalName}`;
+    
+    console.log(`Uploading file for user ${userId}: ${originalName}`);
 
     // Upload to Supabase Storage
     const { data, error } = await supabase.storage
