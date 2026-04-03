@@ -10,9 +10,9 @@ module.exports = (io) => {
     console.log('New clip POST received');
     console.log('User ID from token:', req.user.uid);
     
-    const { content, type } = req.body;
+    const { content, type, fileUrl, fileName, fileSize, mimeType } = req.body;
 
-    if (!content || !type) {
+    if (!content && !fileUrl) {
       return res.status(400).json({ 
         error: 'Bad Request', 
         message: 'Content or fileUrl is required' 
@@ -32,7 +32,7 @@ module.exports = (io) => {
       type: type || 'text',
       userId: req.user.uid,
       timestamp: new Date(),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours auto-delete
     };
 
     // Add file metadata if present

@@ -6,6 +6,7 @@ const cors = require('cors');
 const devicesRouter = require('./routes/devices');
 const uploadRouter = require('./routes/upload');
 const initSockets = require('./sockets/clipSync');
+const { startCleanupScheduler } = require('./utils/cleanup');
 
 const app = express();
 const server = http.createServer(app);
@@ -36,6 +37,9 @@ app.get('/health', (req, res) => {
 });
 
 initSockets(io);
+
+// Start automatic cleanup of expired clips
+startCleanupScheduler();
 
 const PORT = process.env.PORT || 3000;
 
