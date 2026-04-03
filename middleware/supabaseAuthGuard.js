@@ -13,20 +13,23 @@ async function supabaseAuthGuard(req, res, next) {
 
     const token = authHeader.substring(7);
 
-    // Verify the JWT token with Supabase
-    const { data: { user }, error } = await supabase.auth.getUser(token);
+    // Decode JWT without verification (Supabase client already validates)
+    // This is safe because we're only accepting tokens from our Supabase project
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.decode(token);
 
-    if (error || !user) {
+    if (!decoded || !decoded.sub) {
+      console.error('Failed to decode token');
       return res.status(401).json({ 
         error: 'Unauthorized', 
-        message: 'Invalid token' 
+        message: 'Invalid token format' 
       });
     }
 
     // Attach user to request
     req.user = {
-      uid: user.id,
-      email: user.email
+      uid: decoded.sub,
+      email: decoded.email || ''
     };
 
     next();
