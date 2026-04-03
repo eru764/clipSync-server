@@ -1,6 +1,6 @@
 const express = require('express');
-const authGuard = require('../middleware/authGuard');
-const { db, admin } = require('../config/firebase');
+const { supabase } = require('../config/supabase');
+const authGuard = require('../middleware/supabaseAuthGuard');
 
 module.exports = (io) => {
   const router = express.Router();
@@ -36,63 +36,30 @@ module.exports = (io) => {
     const clipData = {
       content: content || '',
       type: type || 'text',
-      userId: req.user.uid,
-      timestamp: new Date(),
-      expiresAt: new Date(Date.now() + expiryTime)
+      user_id: req.user.uid,
+      timestamp: new Date().toISOString(),
+      expires_at: new Date(Date.now() + expiryTime).toISOString()
     };
 
     // Add file metadata if present
     if (fileUrl) {
-      clipData.fileUrl = fileUrl;
-      clipData.fileName = fileName || 'unknown';
-      clipData.fileSize = fileSize || 0;
-      clipData.mimeType = mimeType || 'application/octet-stream';
-      clipData.storagePath = req.body.storagePath || null; // For Firebase Storage cleanup
+      clipData.file_url = fileUrl;
+      clipData.file_name = fileName || 'unknown';
+      clipData.file_size = fileSize || 0;
+      clipData.mime_type = mimeType || 'application/octet-stream';
+      clipData.storage_path = req.body.storagePath || null;
     }
 
-    const clipRef = await db.collection('clips').add(clipData);
-    const savedClip = { id: clipRef.id, ...clipData };
+    const { data: savedClip, error: insertError } = await supabase
+      .from('clips')
+      .insert([clipData])
+      .select()
+      .single();
+
+    if (insertError) throw insertError;
 
     console.log('Emitting to room:', req.user.uid);
-    console.log('Connected rooms:', Object.keys(io.sockets.adapter.rooms).join(', '));
     io.to(req.user.uid).emit('new-clip', savedClip);
-
-    // Send FCM push notifications to all registered devices
-    try {
-      const devicesSnapshot = await db
-        .collection('devices')
-        .where('userId', '==', req.user.uid)
-        .get();
-      
-      const notificationPromises = [];
-      devicesSnapshot.forEach(doc => {
-        const device = doc.data();
-        if (device.fcmToken) {
-          const notificationBody = content.length > 50 ? content.substring(0, 50) + '...' : content;
-          const message = {
-            token: device.fcmToken,
-            notification: {
-              title: 'New Clip',
-              body: notificationBody
-            },
-            data: {
-              clipId: clipRef.id,
-              type: type
-            }
-          };
-          notificationPromises.push(
-            admin.messaging().send(message)
-              .then(() => console.log(`FCM sent to device ${device.deviceId}`))
-              .catch(err => console.error(`FCM failed for device ${device.deviceId}:`, err.message))
-          );
-        }
-      });
-      
-      await Promise.all(notificationPromises);
-    } catch (fcmError) {
-      console.error('Error sending FCM notifications:', fcmError);
-      // Don't fail the request if FCM fails
-    }
 
     res.json(savedClip);
   } catch (error) {
@@ -106,17 +73,14 @@ module.exports = (io) => {
 
 router.get('/', authGuard, async (req, res) => {
   try {
-    const clipsSnapshot = await db
-      .collection('clips')
-      .where('userId', '==', req.user.uid)
-      .orderBy('timestamp', 'desc')
-      .limit(20)
-      .get();
+    const { data: clips, error } = await supabase
+      .from('clips')
+      .select('*')
+      .eq('user_id', req.user.uid)
+      .order('timestamp', { ascending: false })
+      .limit(20);
 
-    const clips = [];
-    clipsSnapshot.forEach(doc => {
-      clips.push({ id: doc.id, ...doc.data() });
-    });
+    if (error) throw error;
 
     res.json(clips);
   } catch (error) {
@@ -132,27 +96,14 @@ router.delete('/:clipId', authGuard, async (req, res) => {
   try {
     const { clipId } = req.params;
 
-    // Get the clip document
-    const clipDoc = await db.collection('clips').doc(clipId).get();
+    // Delete the clip (RLS policy ensures user can only delete their own clips)
+    const { error } = await supabase
+      .from('clips')
+      .delete()
+      .eq('id', clipId)
+      .eq('user_id', req.user.uid);
 
-    if (!clipDoc.exists) {
-      return res.status(404).json({ 
-        error: 'Not Found', 
-        message: 'Clip not found' 
-      });
-    }
-
-    // Verify the clip belongs to the authenticated user
-    const clipData = clipDoc.data();
-    if (clipData.userId !== req.user.uid) {
-      return res.status(403).json({ 
-        error: 'Forbidden', 
-        message: 'You do not have permission to delete this clip' 
-      });
-    }
-
-    // Delete the clip
-    await db.collection('clips').doc(clipId).delete();
+    if (error) throw error;
 
     res.json({ success: true });
   } catch (error) {

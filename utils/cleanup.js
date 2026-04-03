@@ -1,49 +1,54 @@
-const { db } = require('../config/firebase');
-const admin = require('firebase-admin');
-
-// Get Firebase Storage bucket
-const bucket = admin.storage().bucket();
+const { supabase } = require('../config/supabase');
 
 // Clean up expired clips every hour
 async function cleanupExpiredClips() {
   try {
-    const now = new Date();
-    const expiredClipsSnapshot = await db
-      .collection('clips')
-      .where('expiresAt', '<', now)
-      .get();
+    const now = new Date().toISOString();
+    
+    // Get expired clips
+    const { data: expiredClips, error: fetchError } = await supabase
+      .from('clips')
+      .select('*')
+      .lt('expires_at', now);
 
-    if (expiredClipsSnapshot.empty) {
+    if (fetchError) throw fetchError;
+
+    if (!expiredClips || expiredClips.length === 0) {
       console.log('No expired clips to delete');
       return;
     }
 
-    const batch = db.batch();
-    let deleteCount = 0;
     let fileDeleteCount = 0;
 
-    for (const doc of expiredClipsSnapshot.docs) {
-      const clipData = doc.data();
-      
-      // Delete file from Firebase Storage if storagePath exists
-      if (clipData.storagePath) {
+    // Delete files from Supabase Storage
+    for (const clip of expiredClips) {
+      if (clip.storage_path) {
         try {
-          const file = bucket.file(clipData.storagePath);
-          await file.delete();
-          fileDeleteCount++;
-          console.log(`Deleted file: ${clipData.storagePath}`);
+          const { error: storageError } = await supabase.storage
+            .from('uploads')
+            .remove([clip.storage_path]);
+          
+          if (!storageError) {
+            fileDeleteCount++;
+            console.log(`Deleted file: ${clip.storage_path}`);
+          } else {
+            console.error(`Error deleting file ${clip.storage_path}:`, storageError.message);
+          }
         } catch (error) {
-          console.error(`Error deleting file ${clipData.storagePath}:`, error.message);
+          console.error(`Error deleting file ${clip.storage_path}:`, error.message);
         }
       }
-      
-      // Add clip document to batch delete
-      batch.delete(doc.ref);
-      deleteCount++;
     }
 
-    await batch.commit();
-    console.log(`Deleted ${deleteCount} expired clips and ${fileDeleteCount} files from storage`);
+    // Delete clips from database
+    const { error: deleteError } = await supabase
+      .from('clips')
+      .delete()
+      .lt('expires_at', now);
+
+    if (deleteError) throw deleteError;
+
+    console.log(`Deleted ${expiredClips.length} expired clips and ${fileDeleteCount} files from storage`);
   } catch (error) {
     console.error('Error cleaning up expired clips:', error);
   }

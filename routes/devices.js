@@ -1,7 +1,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const authGuard = require('../middleware/authGuard');
-const { db } = require('../config/firebase');
+const authGuard = require('../middleware/supabaseAuthGuard');
+const { supabase } = require('../config/supabase');
 
 const router = express.Router();
 
@@ -26,19 +26,18 @@ router.post('/register', authGuard, async (req, res) => {
     const deviceId = uuidv4();
 
     const deviceData = {
-      userId: req.user.uid,
-      deviceId,
-      deviceName,
+      user_id: req.user.uid,
+      device_id: deviceId,
+      device_name: deviceName,
       platform,
-      registeredAt: new Date()
+      fcm_token: fcmToken || null
     };
 
-    // Add FCM token if provided
-    if (fcmToken) {
-      deviceData.fcmToken = fcmToken;
-    }
+    const { error } = await supabase
+      .from('devices')
+      .insert([deviceData]);
 
-    await db.collection('devices').doc(deviceId).set(deviceData);
+    if (error) throw error;
 
     res.json({ success: true, deviceId });
   } catch (error) {
@@ -52,15 +51,12 @@ router.post('/register', authGuard, async (req, res) => {
 
 router.get('/', authGuard, async (req, res) => {
   try {
-    const devicesSnapshot = await db
-      .collection('devices')
-      .where('userId', '==', req.user.uid)
-      .get();
+    const { data: devices, error } = await supabase
+      .from('devices')
+      .select('*')
+      .eq('user_id', req.user.uid);
 
-    const devices = [];
-    devicesSnapshot.forEach(doc => {
-      devices.push(doc.data());
-    });
+    if (error) throw error;
 
     res.json(devices);
   } catch (error) {
@@ -76,27 +72,14 @@ router.delete('/:deviceId', authGuard, async (req, res) => {
   try {
     const { deviceId } = req.params;
 
-    // Get the device document
-    const deviceDoc = await db.collection('devices').doc(deviceId).get();
+    // Delete the device (RLS ensures user can only delete their own)
+    const { error } = await supabase
+      .from('devices')
+      .delete()
+      .eq('device_id', deviceId)
+      .eq('user_id', req.user.uid);
 
-    if (!deviceDoc.exists) {
-      return res.status(404).json({ 
-        error: 'Not Found', 
-        message: 'Device not found' 
-      });
-    }
-
-    // Verify the device belongs to the authenticated user
-    const deviceData = deviceDoc.data();
-    if (deviceData.userId !== req.user.uid) {
-      return res.status(403).json({ 
-        error: 'Forbidden', 
-        message: 'You do not have permission to delete this device' 
-      });
-    }
-
-    // Delete the device
-    await db.collection('devices').doc(deviceId).delete();
+    if (error) throw error;
 
     res.json({ success: true });
   } catch (error) {
