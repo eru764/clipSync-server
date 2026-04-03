@@ -12,15 +12,17 @@ const initSockets = (io) => {
           return;
         }
 
-        // Verify Supabase JWT token
+        // Verify Supabase JWT token - just decode without verification
+        // Supabase tokens are already verified by the auth middleware
         const jwt = require('jsonwebtoken');
-        const decoded = jwt.decode(token, { complete: true });
+        const decoded = jwt.decode(token);
         
-        if (!decoded) {
+        if (!decoded || !decoded.sub) {
+          console.error('Failed to decode token:', token.substring(0, 20) + '...');
           throw new Error('Invalid token');
         }
 
-        const userId = decoded.payload.sub;
+        const userId = decoded.sub;
 
         socket.join(userId);
         socket.emit('room-joined', { userId });
