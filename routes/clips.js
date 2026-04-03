@@ -113,5 +113,41 @@ router.get('/', authGuard, async (req, res) => {
   }
 });
 
+router.delete('/:clipId', authGuard, async (req, res) => {
+  try {
+    const { clipId } = req.params;
+
+    // Get the clip document
+    const clipDoc = await db.collection('clips').doc(clipId).get();
+
+    if (!clipDoc.exists) {
+      return res.status(404).json({ 
+        error: 'Not Found', 
+        message: 'Clip not found' 
+      });
+    }
+
+    // Verify the clip belongs to the authenticated user
+    const clipData = clipDoc.data();
+    if (clipData.userId !== req.user.uid) {
+      return res.status(403).json({ 
+        error: 'Forbidden', 
+        message: 'You do not have permission to delete this clip' 
+      });
+    }
+
+    // Delete the clip
+    await db.collection('clips').doc(clipId).delete();
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting clip:', error);
+    res.status(500).json({ 
+      error: 'Internal Server Error', 
+      message: 'Failed to delete clip' 
+    });
+  }
+});
+
   return router;
 };
