@@ -15,12 +15,12 @@ module.exports = (io) => {
     if (!content || !type) {
       return res.status(400).json({ 
         error: 'Bad Request', 
-        message: 'content and type are required' 
+        message: 'Content or fileUrl is required' 
       });
     }
 
     const validTypes = ['text', 'image', 'pdf', 'doc', 'video'];
-    if (!validTypes.includes(type)) {
+    if (type && !validTypes.includes(type)) {
       return res.status(400).json({ 
         error: 'Bad Request', 
         message: 'type must be text, image, pdf, doc, or video' 
@@ -28,12 +28,20 @@ module.exports = (io) => {
     }
 
     const clipData = {
+      content: content || '',
+      type: type || 'text',
       userId: req.user.uid,
-      content,
-      type,
       timestamp: new Date(),
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
     };
+
+    // Add file metadata if present
+    if (fileUrl) {
+      clipData.fileUrl = fileUrl;
+      clipData.fileName = fileName || 'unknown';
+      clipData.fileSize = fileSize || 0;
+      clipData.mimeType = mimeType || 'application/octet-stream';
+    }
 
     const clipRef = await db.collection('clips').add(clipData);
     const savedClip = { id: clipRef.id, ...clipData };

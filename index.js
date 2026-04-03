@@ -4,6 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const devicesRouter = require('./routes/devices');
+const uploadRouter = require('./routes/upload');
 const initSockets = require('./sockets/clipSync');
 
 const app = express();
@@ -25,6 +26,7 @@ app.use(express.json());
 
 app.use('/devices', devicesRouter);
 app.use('/clips', clipsRouter);
+app.use('/upload', uploadRouter);
 
 app.get('/health', (req, res) => {
   res.json({ 
