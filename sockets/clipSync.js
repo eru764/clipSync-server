@@ -13,13 +13,14 @@ const initSockets = (io) => {
         }
 
         // Verify Supabase JWT token
-        const { data: { user }, error } = await supabase.auth.getUser(token);
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.decode(token, { complete: true });
         
-        if (error || !user) {
+        if (!decoded) {
           throw new Error('Invalid token');
         }
 
-        const userId = user.id;
+        const userId = decoded.payload.sub;
 
         socket.join(userId);
         socket.emit('room-joined', { userId });

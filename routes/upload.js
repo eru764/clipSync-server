@@ -36,12 +36,19 @@ router.post('/', authGuard, upload.single('file'), async (req, res) => {
         upsert: false
       });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase Storage upload error:', error);
+      throw error;
+    }
+
+    console.log(`File uploaded successfully: ${storagePath}`);
 
     // Get public URL
     const { data: { publicUrl } } = supabase.storage
       .from('uploads')
       .getPublicUrl(storagePath);
+
+    console.log(`Public URL: ${publicUrl}`);
 
     res.json({
       success: true,
@@ -53,9 +60,11 @@ router.post('/', authGuard, upload.single('file'), async (req, res) => {
     });
   } catch (error) {
     console.error('Error uploading to Supabase Storage:', error);
+    console.error('Error details:', JSON.stringify(error, null, 2));
     res.status(500).json({ 
       error: 'Internal Server Error', 
-      message: 'Failed to upload file' 
+      message: error.message || 'Failed to upload file',
+      details: error.toString()
     });
   }
 });
