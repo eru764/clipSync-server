@@ -27,12 +27,18 @@ module.exports = (io) => {
       });
     }
 
+    // Images and files expire after 2 hours, text after 24 hours
+    const isMediaClip = fileUrl || type === 'image' || type === 'file';
+    const expiryTime = isMediaClip 
+      ? 2 * 60 * 60 * 1000  // 2 hours for images/files
+      : 24 * 60 * 60 * 1000; // 24 hours for text
+    
     const clipData = {
       content: content || '',
       type: type || 'text',
       userId: req.user.uid,
       timestamp: new Date(),
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours auto-delete
+      expiresAt: new Date(Date.now() + expiryTime)
     };
 
     // Add file metadata if present
@@ -41,6 +47,7 @@ module.exports = (io) => {
       clipData.fileName = fileName || 'unknown';
       clipData.fileSize = fileSize || 0;
       clipData.mimeType = mimeType || 'application/octet-stream';
+      clipData.storagePath = req.body.storagePath || null; // For Firebase Storage cleanup
     }
 
     const clipRef = await db.collection('clips').add(clipData);
