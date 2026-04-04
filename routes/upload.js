@@ -8,7 +8,7 @@ const { supabase } = require('../config/supabase');
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB max file size
+    fileSize: 50 * 1024 * 1024, // 50MB max file size
   },
 });
 
@@ -22,9 +22,29 @@ router.post('/', authGuard, upload.single('file'), async (req, res) => {
       });
     }
 
+    const userId = req.user.id || req.user.uid;
+
+    // Check current storage usage for this user
+    const { data: existingFiles, error: listError } = await supabase.storage
+      .from('uploads')
+      .list(userId);
+
+    if (!listError && existingFiles) {
+      const totalSize = existingFiles.reduce((sum, file) => sum + (file.metadata?.size || 0), 0);
+      const storageLimit = 100 * 1024 * 1024; // 100MB total limit
+      
+      if (totalSize + req.file.size > storageLimit) {
+        return res.status(413).json({
+          error: 'Storage Limit Exceeded',
+          message: 'You have reached your 100MB storage limit. Please delete some files or wait for old files to expire.',
+          currentUsage: totalSize,
+          limit: storageLimit
+        });
+      }
+    }
+
     // Generate unique filename with timestamp
     const timestamp = Date.now();
-    const userId = req.user.id || req.user.uid;
     const originalName = req.file.originalname;
     const storagePath = `${userId}/${timestamp}_${originalName}`;
     
